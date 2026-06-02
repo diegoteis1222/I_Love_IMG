@@ -1,4 +1,4 @@
-# Siweb Image Tools
+# I Love IMG
 
 Plataforma interna de utilidades de imagen (estilo iLoveIMG) para uso del equipo.
 Autohospedada, sin envío de datos a servicios externos.
@@ -69,4 +69,4 @@ Ver `docs/Propuesta_Tecnica_Plataforma_Imagenes.docx` para la propuesta completa
 
 ## Licencia
 
-Uso interno Siweb.
+Uso interno I Love IMG.

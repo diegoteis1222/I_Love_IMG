@@ -1,5 +1,5 @@
 """
-Microservicio interno de IA para Siweb Image Tools.
+Microservicio interno de IA para I Love IMG.
 
 Solo se expone hacia la red interna de Docker. El frontend Next.js
 es el único cliente legítimo.
@@ -35,7 +35,7 @@ def get_session():
 
 
 app = FastAPI(
-    title="Siweb Image Tools - AI Service",
+    title="I Love IMG - AI Service",
     description="Microservicio interno para tareas con IA (eliminación de fondo).",
     version="0.1.0",
     docs_url=None,        # API no documentada públicamente

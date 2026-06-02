@@ -2,7 +2,7 @@
  * Configuración centralizada del frontend.
  */
 
-export const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? 'Siweb Image Tools';
+export const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? 'I Love IMG';
 
 export const MAX_FILE_SIZE_MB = parseInt(
   process.env.MAX_FILE_SIZE_MB ?? '25',
