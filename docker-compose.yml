@@ -1,0 +1,42 @@
+services:
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: imgedit-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - AI_SERVICE_URL=http://ai-service:8001
+      - NEXT_PUBLIC_APP_NAME=${NEXT_PUBLIC_APP_NAME:-Siweb Image Tools}
+      - MAX_FILE_SIZE_MB=${MAX_FILE_SIZE_MB:-25}
+      - MAX_FILES_PER_REQUEST=${MAX_FILES_PER_REQUEST:-20}
+    depends_on:
+      - ai-service
+    networks:
+      - imgedit
+
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: imgedit-ai
+    restart: unless-stopped
+    expose:
+      - "8001"
+    environment:
+      - REMBG_MODEL=${REMBG_MODEL:-birefnet-general}
+    volumes:
+      # Persistimos los modelos descargados para no bajarlos en cada arranque
+      - ai-models:/root/.u2net
+    networks:
+      - imgedit
+
+networks:
+  imgedit:
+    driver: bridge
+
+volumes:
+  ai-models:
