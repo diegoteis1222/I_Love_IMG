@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
+  //output: 'standalone',
   experimental: {
     // Sharp se ejecuta nativo en Node, no transpilar
     serverComponentsExternalPackages: ['sharp']
