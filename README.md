@@ -33,10 +33,11 @@ Disponible en http://localhost:3000
 
 ### 2. Microservicio IA
 
-Un único servicio atiende las dos herramientas con IA: **Quitar fondo**
-(rembg) y **Quitar marca de agua** (LaMa, inpainting). No hay que arrancar
-nada más: el mismo `uvicorn` expone ambos endpoints. Si solo usas las
-herramientas de Sharp (convertir, comprimir, etc.), puedes saltarte este paso.
+Un único servicio atiende las herramientas con IA: **Quitar fondo** (rembg),
+**Quitar marca de agua** (LaMa, inpainting) y **Editar texto en imagen**
+(EasyOCR + LaMa). No hay que arrancar nada más: el mismo `uvicorn` expone
+todos los endpoints. Si solo usas las herramientas de Sharp (convertir,
+comprimir, etc.), puedes saltarte este paso.
 
 ```bash
 cd ai-service
@@ -47,9 +48,10 @@ uvicorn app.main:app --reload --port 8001
 ```
 
 La primera vez se descargan los modelos automáticamente: rembg (~970 MB, al
-arrancar el servicio) y LaMa (~200 MB, al hacer la primera petición de Quitar
-marca de agua — esa primera petición tarda más por la descarga y la carga del
-modelo; las siguientes son normales, entre 5 y 30 s por imagen en CPU).
+arrancar el servicio), LaMa (~200 MB, al hacer la primera petición de Quitar
+marca de agua) y EasyOCR (~150 MB, en la primera detección de texto). Esas
+primeras peticiones tardan más por la descarga y la carga del modelo; las
+siguientes son normales, entre 5 y 30 s por imagen en CPU.
 
 Si el servicio corre en otro puerto o máquina, indícalo al frontend en
 `web/.env.local`:
@@ -98,13 +100,14 @@ Disponible en http://localhost:3000
 | Marca de agua     | ✅     | Sharp (SVG) |
 | Añadir texto      | ✅     | Sharp (SVG) |
 | Quitar marca de agua | ✅  | LaMa (IA)   |
+| Editar texto en imagen | ✅ | EasyOCR + LaMa (IA) |
 
 ## Roadmap
 
 - **Fase 1 (MVP)**: Convertir, Comprimir, Quitar fondo. ✅
 - **Fase 2**: ~~Redimensionar~~, ~~Rotar~~, ~~Marcas de agua~~, ~~Añadir texto~~. ✅
 - **Fase 3**: ~~Eliminar marca de agua / objetos (inpainting)~~. ✅
-- **Fase 4**: OCR + edición de texto.
+- **Fase 4**: ~~OCR + edición de texto~~. ✅
 - **Fase 5**: Módulo PDF (unir, dividir, comprimir, convertir).
 
 Ver `docs/Propuesta_Tecnica_Plataforma_Imagenes.docx` para la propuesta completa.

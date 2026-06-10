@@ -107,6 +107,10 @@ export function describeRemoveWatermark(): string {
   return 'sin marca de agua';
 }
 
+export function describeEditText(): string {
+  return 'texto editado';
+}
+
 export function describeAddText(): string {
   return 'con texto';
 }

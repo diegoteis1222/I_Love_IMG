@@ -27,12 +27,18 @@ MODEL_NAME = os.getenv("REMBG_MODEL", "birefnet-general")
 # a resolución completa (solo cambia la zona enmascarada).
 INPAINT_MAX_SIDE = int(os.getenv("INPAINT_MAX_SIDE", "1600"))
 
+# Idiomas del OCR (códigos de EasyOCR separados por comas).
+OCR_LANGS = [s.strip() for s in os.getenv("OCR_LANGS", "es,en").split(",") if s.strip()]
+
 # Cache de la sesión rembg para no recargar el modelo en cada petición.
 _session: Optional[object] = None
 
 # Cache del modelo LaMa de inpainting (carga perezosa: es pesado y solo
 # hace falta si se usa la herramienta de quitar marca de agua).
 _lama: Optional[object] = None
+
+# Cache del lector OCR (carga perezosa, solo para editar texto).
+_ocr: Optional[object] = None
 
 
 def get_session():
@@ -53,6 +59,17 @@ def get_lama():
         _lama = SimpleLama()
         log.info("Modelo LaMa cargado.")
     return _lama
+
+
+def get_ocr():
+    global _ocr
+    if _ocr is None:
+        import easyocr
+
+        log.info("Cargando OCR EasyOCR: %s", OCR_LANGS)
+        _ocr = easyocr.Reader(OCR_LANGS, gpu=False, verbose=False)
+        log.info("OCR cargado.")
+    return _ocr
 
 
 def run_inpaint(image: Image.Image, mask: Image.Image) -> Image.Image:
@@ -205,4 +222,53 @@ async def inpaint(
         raise HTTPException(
             status_code=500,
             detail="No se ha podido procesar la imagen",
+        )
+
+
+@app.post("/detect-text")
+async def detect_text(file: UploadFile = File(...)) -> dict:
+    """Detecta texto en la imagen con OCR.
+
+    Devuelve las cajas delimitadoras (rectángulos alineados a ejes) en
+    coordenadas de la imagen ya corregida de orientación EXIF.
+    """
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="El archivo debe ser una imagen")
+
+    try:
+        data = await file.read()
+        if not data:
+            raise HTTPException(status_code=400, detail="El archivo está vacío")
+
+        import numpy as np
+
+        image = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
+        results = get_ocr().readtext(np.asarray(image))
+
+        items = []
+        for box, text, confidence in results:
+            xs = [float(p[0]) for p in box]
+            ys = [float(p[1]) for p in box]
+            x0, y0 = max(0, min(xs)), max(0, min(ys))
+            x1, y1 = min(image.width, max(xs)), min(image.height, max(ys))
+            items.append(
+                {
+                    "text": text,
+                    "confidence": round(float(confidence), 3),
+                    "x": int(x0),
+                    "y": int(y0),
+                    "width": int(x1 - x0),
+                    "height": int(y1 - y0),
+                }
+            )
+
+        log.info("detect-text OK: %s (%d zonas)", file.filename, len(items))
+        return {"width": image.width, "height": image.height, "items": items}
+    except HTTPException:
+        raise
+    except Exception:
+        log.exception("Error en detect-text %s", file.filename)
+        raise HTTPException(
+            status_code=500,
+            detail="No se ha podido analizar la imagen",
         )

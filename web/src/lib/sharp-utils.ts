@@ -590,6 +590,88 @@ export async function addText(
     .toBuffer();
 }
 
+// ─── Edit text (OCR + inpainting) ──────────────────────────────────────────────
+
+export interface TextRegion {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  newText?: string;
+}
+
+/**
+ * Construye la máscara de inpainting (blanco = eliminar) a partir de las
+ * cajas detectadas por el OCR, con un pequeño margen alrededor.
+ */
+export async function buildRegionsMask(
+  width: number,
+  height: number,
+  regions: TextRegion[]
+): Promise<Buffer> {
+  const rects = regions
+    .map((r) => {
+      const pad = Math.max(4, Math.round(r.height * 0.25));
+      const x = Math.max(0, r.x - pad);
+      const y = Math.max(0, r.y - pad);
+      const w = Math.min(width - x, r.width + pad * 2);
+      const h = Math.min(height - y, r.height + pad * 2);
+      return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="white"/>`;
+    })
+    .join('');
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+    <rect width="100%" height="100%" fill="black"/>
+    ${rects}
+  </svg>`;
+
+  return sharp(Buffer.from(svg)).png().toBuffer();
+}
+
+/**
+ * Dibuja los textos de reemplazo centrados en sus cajas originales.
+ * El tamaño de fuente se deriva de la altura de cada caja.
+ */
+export async function renderTextRegions(
+  buffer: Buffer,
+  regions: TextRegion[],
+  options: { fontFamily?: string; color?: string } = {}
+): Promise<Buffer> {
+  const withText = regions.filter((r) => r.newText && r.newText.trim() !== '');
+  if (withText.length === 0) return buffer;
+
+  const meta = await sharp(buffer).metadata();
+  const imgW = meta.width ?? 800;
+  const imgH = meta.height ?? 600;
+
+  const fontFamily = options.fontFamily ?? 'sans-serif';
+  const color = options.color ?? '#000000';
+
+  const texts = withText
+    .map((r) => {
+      const text = escapeXml(r.newText!.trim());
+      const fontSize = Math.max(8, Math.round(r.height * 0.8));
+      const cx = r.x + r.width / 2;
+      const cy = r.y + r.height / 2;
+      // Si el texto nuevo es más largo que la caja, lo comprimimos para que quepa
+      const estimatedWidth = r.newText!.trim().length * fontSize * 0.55;
+      const fit = estimatedWidth > r.width
+        ? `textLength="${r.width}" lengthAdjust="spacingAndGlyphs"`
+        : '';
+      return `<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central"
+              font-family="${fontFamily}" font-size="${fontSize}" fill="${color}" ${fit}>${text}</text>`;
+    })
+    .join('\n');
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${imgW}" height="${imgH}">
+    ${texts}
+  </svg>`;
+
+  return sharp(buffer, { failOn: 'error' })
+    .composite([{ input: Buffer.from(svg) }])
+    .toBuffer();
+}
+
 // ─── Utilities ─────────────────────────────────────────────────────────────────
 
 export function replaceExtension(filename: string, newExt: string): string {

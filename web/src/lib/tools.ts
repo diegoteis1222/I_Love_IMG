@@ -87,9 +87,9 @@ export const TOOLS: Tool[] = [
   {
     slug: 'editar-texto',
     name: 'Editar texto en imagen',
-    description: 'OCR + edición o eliminación de texto existente.',
+    description: 'Detecta texto con OCR y edítalo o elimínalo.',
     icon: '🔤',
-    status: 'coming-soon',
+    status: 'available',
     category: 'edit'
   }
 ];
