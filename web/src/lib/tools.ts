@@ -74,6 +74,54 @@ export const TOOLS: Tool[] = [
     status: 'available',
     category: 'edit'
   },
+  {
+    slug: 'recortar',
+    name: 'Recortar',
+    description: 'Selecciona visualmente la zona a conservar.',
+    icon: '🔲',
+    status: 'available',
+    category: 'transform'
+  },
+  {
+    slug: 'ajustes',
+    name: 'Ajustes de imagen',
+    description: 'Brillo, contraste, saturación y tono.',
+    icon: '🎚️',
+    status: 'available',
+    category: 'enhance'
+  },
+  {
+    slug: 'filtros',
+    name: 'Filtros',
+    description: 'Grises, sepia, negativo, desenfoque y nitidez.',
+    icon: '🎨',
+    status: 'available',
+    category: 'enhance'
+  },
+  {
+    slug: 'bordes',
+    name: 'Bordes y marcos',
+    description: 'Añade un borde de color alrededor de la imagen.',
+    icon: '🖼️',
+    status: 'available',
+    category: 'edit'
+  },
+  {
+    slug: 'favicon-pack',
+    name: 'Crear favicon',
+    description: 'Genera el paquete completo de iconos para tu web.',
+    icon: '🌐',
+    status: 'available',
+    category: 'transform'
+  },
+  {
+    slug: 'eliminar-metadatos',
+    name: 'Eliminar metadatos',
+    description: 'Detecta y borra EXIF, GPS y datos de la cámara.',
+    icon: '🔒',
+    status: 'available',
+    category: 'transform'
+  },
 
   // --- Fase 3+ ---
   {

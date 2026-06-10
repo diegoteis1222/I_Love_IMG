@@ -36,7 +36,11 @@ interface Props {
 
 export function MarcaAguaClient({ maxSizeMB }: Props) {
   const [files, setFiles] = useState<File[]>([]);
+  const [mode, setMode] = useState<'text' | 'image'>('text');
   const [text, setText] = useState('© Mi Empresa 2026');
+  const [logo, setLogo] = useState<File | null>(null);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [scalePercent, setScalePercent] = useState(20);
   const [position, setPosition] = useState<Position>('bottom-right');
   const [fontSize, setFontSize] = useState(0); // 0 = auto
   const [opacity, setOpacity] = useState(30);
@@ -44,6 +48,9 @@ export function MarcaAguaClient({ maxSizeMB }: Props) {
   const [rotation, setRotation] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const ready =
+    files.length > 0 && (mode === 'text' ? text.trim() !== '' : logo !== null);
 
   // When switching to tile, set a default rotation
   function handlePositionChange(pos: Position) {
@@ -56,18 +63,24 @@ export function MarcaAguaClient({ maxSizeMB }: Props) {
   }
 
   async function process() {
-    if (files.length === 0 || !text.trim()) return;
+    if (!ready) return;
     setBusy(true);
     setError(null);
 
     try {
       const fd = new FormData();
-      fd.append('text', text.trim());
+      fd.append('mode', mode);
       fd.append('position', position);
-      if (fontSize > 0) fd.append('fontSize', String(fontSize));
       fd.append('opacity', String(opacity));
-      fd.append('color', color);
-      fd.append('rotation', String(rotation));
+      if (mode === 'image' && logo) {
+        fd.append('logo', logo);
+        fd.append('scalePercent', String(scalePercent));
+      } else {
+        fd.append('text', text.trim());
+        if (fontSize > 0) fd.append('fontSize', String(fontSize));
+        fd.append('color', color);
+        fd.append('rotation', String(rotation));
+      }
       files.forEach((f) => fd.append('files', f));
 
       const res = await fetch('/api/watermark', { method: 'POST', body: fd });
@@ -107,20 +120,86 @@ export function MarcaAguaClient({ maxSizeMB }: Props) {
         />
       )}
 
-      {/* Watermark Text */}
+      {/* Watermark options */}
       <div className="card p-5 space-y-5">
-        <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-2">
-            Texto de la marca de agua
-          </label>
-          <input
-            type="text"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="© Mi Empresa 2026"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-          />
+        {/* Mode selector */}
+        <div className="inline-flex rounded-lg border border-slate-200 p-1 bg-slate-50">
+          {([
+            { key: 'text', label: '🅰 Texto' },
+            { key: 'image', label: '🖼 Logo / imagen' }
+          ] as const).map((m) => (
+            <button
+              key={m.key}
+              type="button"
+              onClick={() => setMode(m.key)}
+              className={
+                mode === m.key
+                  ? 'rounded-md bg-white px-3 py-1.5 text-xs font-semibold text-brand-700 shadow-sm'
+                  : 'rounded-md px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900'
+              }
+            >
+              {m.label}
+            </button>
+          ))}
         </div>
+
+        {mode === 'text' && (
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              Texto de la marca de agua
+            </label>
+            <input
+              type="text"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="© Mi Empresa 2026"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
+          </div>
+        )}
+
+        {mode === 'image' && (
+          <div className="space-y-3">
+            <label className="block text-sm font-semibold text-slate-700">
+              Logo (PNG con transparencia recomendado)
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const f = e.target.files?.[0] ?? null;
+                  setLogo(f);
+                  setLogoUrl(f ? URL.createObjectURL(f) : null);
+                }}
+                className="text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-brand-700 hover:file:bg-brand-100 file:cursor-pointer"
+              />
+              {logoUrl && (
+                <div className="checkered rounded border border-slate-200 p-1">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={logoUrl} alt="Logo" className="h-12 w-auto" />
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="flex items-center justify-between text-sm font-semibold text-slate-700 mb-2">
+                <span>Tamaño del logo</span>
+                <span className="text-slate-500 font-medium">
+                  {scalePercent}% del ancho
+                </span>
+              </label>
+              <input
+                type="range"
+                min={5}
+                max={60}
+                step={1}
+                value={scalePercent}
+                onChange={(e) => setScalePercent(Number(e.target.value))}
+                className="w-full accent-brand-600"
+              />
+            </div>
+          </div>
+        )}
 
         {/* Position Grid */}
         <div>
@@ -159,35 +238,37 @@ export function MarcaAguaClient({ maxSizeMB }: Props) {
           </div>
         </div>
 
-        {/* Color */}
-        <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-2">
-            Color
-          </label>
-          <div className="flex items-center gap-2">
-            {COLOR_PRESETS.map((c) => (
-              <button
-                key={c.value}
-                type="button"
-                onClick={() => setColor(c.value)}
-                className={
-                  color === c.value
-                    ? 'w-8 h-8 rounded-full border-2 border-brand-600 shadow-sm ring-2 ring-brand-200'
-                    : 'w-8 h-8 rounded-full border-2 border-slate-300 hover:border-slate-400'
-                }
-                style={{ backgroundColor: c.value }}
-                title={c.label}
+        {/* Color (solo texto) */}
+        {mode === 'text' && (
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              Color
+            </label>
+            <div className="flex items-center gap-2">
+              {COLOR_PRESETS.map((c) => (
+                <button
+                  key={c.value}
+                  type="button"
+                  onClick={() => setColor(c.value)}
+                  className={
+                    color === c.value
+                      ? 'w-8 h-8 rounded-full border-2 border-brand-600 shadow-sm ring-2 ring-brand-200'
+                      : 'w-8 h-8 rounded-full border-2 border-slate-300 hover:border-slate-400'
+                  }
+                  style={{ backgroundColor: c.value }}
+                  title={c.label}
+                />
+              ))}
+              <input
+                type="color"
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
+                className="w-8 h-8 rounded cursor-pointer border border-slate-300"
+                title="Color personalizado"
               />
-            ))}
-            <input
-              type="color"
-              value={color}
-              onChange={(e) => setColor(e.target.value)}
-              className="w-8 h-8 rounded cursor-pointer border border-slate-300"
-              title="Color personalizado"
-            />
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Opacity */}
         <div>
@@ -206,44 +287,48 @@ export function MarcaAguaClient({ maxSizeMB }: Props) {
           />
         </div>
 
-        {/* Font Size */}
-        <div>
-          <label className="flex items-center justify-between text-sm font-semibold text-slate-700 mb-2">
-            <span>Tamaño de fuente</span>
-            <span className="text-slate-500 font-medium">
-              {fontSize === 0 ? 'Auto' : `${fontSize}px`}
-            </span>
-          </label>
-          <input
-            type="range"
-            min={0}
-            max={200}
-            step={2}
-            value={fontSize}
-            onChange={(e) => setFontSize(Number(e.target.value))}
-            className="w-full accent-brand-600"
-          />
-          <p className="mt-1 text-xs text-slate-500">
-            0 = tamaño automático proporcional a la imagen.
-          </p>
-        </div>
+        {/* Font Size (solo texto) */}
+        {mode === 'text' && (
+          <div>
+            <label className="flex items-center justify-between text-sm font-semibold text-slate-700 mb-2">
+              <span>Tamaño de fuente</span>
+              <span className="text-slate-500 font-medium">
+                {fontSize === 0 ? 'Auto' : `${fontSize}px`}
+              </span>
+            </label>
+            <input
+              type="range"
+              min={0}
+              max={200}
+              step={2}
+              value={fontSize}
+              onChange={(e) => setFontSize(Number(e.target.value))}
+              className="w-full accent-brand-600"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              0 = tamaño automático proporcional a la imagen.
+            </p>
+          </div>
+        )}
 
-        {/* Rotation */}
-        <div>
-          <label className="flex items-center justify-between text-sm font-semibold text-slate-700 mb-2">
-            <span>Rotación</span>
-            <span className="text-slate-500 font-medium">{rotation}°</span>
-          </label>
-          <input
-            type="range"
-            min={-180}
-            max={180}
-            step={5}
-            value={rotation}
-            onChange={(e) => setRotation(Number(e.target.value))}
-            className="w-full accent-brand-600"
-          />
-        </div>
+        {/* Rotation (solo texto) */}
+        {mode === 'text' && (
+          <div>
+            <label className="flex items-center justify-between text-sm font-semibold text-slate-700 mb-2">
+              <span>Rotación</span>
+              <span className="text-slate-500 font-medium">{rotation}°</span>
+            </label>
+            <input
+              type="range"
+              min={-180}
+              max={180}
+              step={5}
+              value={rotation}
+              onChange={(e) => setRotation(Number(e.target.value))}
+              className="w-full accent-brand-600"
+            />
+          </div>
+        )}
       </div>
 
       {error && (
@@ -255,7 +340,7 @@ export function MarcaAguaClient({ maxSizeMB }: Props) {
       <div className="flex gap-3">
         <button
           onClick={process}
-          disabled={busy || files.length === 0 || !text.trim()}
+          disabled={busy || !ready}
           className="btn-primary"
         >
           {busy ? 'Procesando…' : `Aplicar marca de agua ${files.length || ''}`}

@@ -111,6 +111,26 @@ export function describeEditText(): string {
   return 'texto editado';
 }
 
+export function describeCrop(width: number, height: number): string {
+  return `recortada ${width}x${height}`;
+}
+
+export function describeAdjust(): string {
+  return 'ajustada';
+}
+
+export function describeFilter(label: string): string {
+  return `filtro ${label}`;
+}
+
+export function describeBorder(thickness: number): string {
+  return `borde ${thickness}px`;
+}
+
+export function describeStripMetadata(): string {
+  return 'sin metadatos';
+}
+
 export function describeAddText(): string {
   return 'con texto';
 }

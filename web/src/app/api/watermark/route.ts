@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   addWatermark,
+  addImageWatermark,
+  replaceExtension,
   type WatermarkPosition
 } from '@/lib/sharp-utils';
 import { createZip } from '@/lib/zip';
@@ -34,19 +36,36 @@ function parseNumber(value: FormDataEntryValue | null): number | undefined {
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
+    const mode = formData.get('mode') === 'image' ? 'image' : 'text';
     const text = formData.get('text');
+    const logo = formData.get('logo');
     const position = parsePosition(formData.get('position'));
     const fontSize = parseNumber(formData.get('fontSize'));
     const opacity = parseNumber(formData.get('opacity'));
+    const scalePercent = parseNumber(formData.get('scalePercent'));
     const color = (formData.get('color') as string) || '#ffffff';
     const rotation = parseNumber(formData.get('rotation'));
     const files = formData.getAll('files') as File[];
 
-    if (typeof text !== 'string' || text.trim() === '') {
+    if (mode === 'text' && (typeof text !== 'string' || text.trim() === '')) {
       return NextResponse.json(
         { error: 'El texto de la marca de agua no puede estar vacío' },
         { status: 400 }
       );
+    }
+    if (mode === 'image') {
+      if (!(logo instanceof File)) {
+        return NextResponse.json(
+          { error: 'Falta la imagen del logo' },
+          { status: 400 }
+        );
+      }
+      if (logo.size > MAX_FILE_SIZE_BYTES) {
+        return NextResponse.json(
+          { error: 'El logo supera el tamaño máximo permitido' },
+          { status: 400 }
+        );
+      }
     }
     if (files.length === 0) {
       return NextResponse.json(
@@ -70,12 +89,30 @@ export async function POST(req: NextRequest) {
     }
 
     const description = describeWatermark();
+    const logoBuf =
+      mode === 'image' && logo instanceof File
+        ? Buffer.from(await logo.arrayBuffer())
+        : null;
 
     const results = await Promise.all(
       files.map(async (file) => {
         const buf = Buffer.from(await file.arrayBuffer());
+
+        if (logoBuf) {
+          const { buffer: out, format } = await addImageWatermark(buf, logoBuf, {
+            position,
+            scalePercent,
+            opacity
+          });
+          const renamed = replaceExtension(file.name, format);
+          return {
+            name: applyDescriptionToFilename(renamed, format, description),
+            data: out
+          };
+        }
+
         const out = await addWatermark(buf, {
-          text: text.trim(),
+          text: (text as string).trim(),
           position,
           fontSize,
           opacity,

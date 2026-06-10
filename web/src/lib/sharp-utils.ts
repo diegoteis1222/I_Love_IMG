@@ -97,9 +97,13 @@ export async function compressImage(
   const inputFormat = meta.format ?? 'jpeg';
   const hasAlpha = !!meta.hasAlpha;
 
-  void stripMetadata;
-
   let pipeline = sharp(buffer, { failOn: 'error' }).rotate();
+
+  // Por defecto sharp descarta los metadatos; si el usuario quiere
+  // conservarlos, los copiamos (la orientación queda corregida tras .rotate())
+  if (!stripMetadata) {
+    pipeline = pipeline.withMetadata();
+  }
 
   if (
     scalePercent &&
@@ -588,6 +592,428 @@ export async function addText(
       gravity
     }])
     .toBuffer();
+}
+
+// ─── Keep-format helper ────────────────────────────────────────────────────────
+
+/** Configura el encoder para conservar el formato de entrada. */
+function keepOriginalFormat(
+  pipeline: sharp.Sharp,
+  inputFormat: string
+): { pipeline: sharp.Sharp; format: string; mime: string } {
+  let p = pipeline;
+  switch (inputFormat) {
+    case 'jpeg':
+    case 'jpg':
+      p = p.jpeg({ quality: 95, mozjpeg: true });
+      break;
+    case 'png':
+      p = p.png({ compressionLevel: 9 });
+      break;
+    case 'webp':
+      p = p.webp({ quality: 95 });
+      break;
+    case 'avif':
+      p = p.avif({ quality: 80 });
+      break;
+    case 'tiff':
+      p = p.tiff({ quality: 95 });
+      break;
+    case 'gif':
+      p = p.gif();
+      break;
+    default:
+      p = p.jpeg({ quality: 95, mozjpeg: true });
+  }
+  const ext =
+    inputFormat === 'jpg' ? 'jpg' : FORMAT_EXTENSIONS[inputFormat as SupportedFormat] ?? 'jpg';
+  const mime = FORMAT_MIMES[inputFormat as SupportedFormat] ?? 'image/jpeg';
+  return { pipeline: p, format: ext, mime };
+}
+
+/** Dimensiones tras aplicar la orientación EXIF (lo que ve el usuario). */
+function orientedSize(meta: sharp.Metadata): { width: number; height: number } {
+  const swap = (meta.orientation ?? 1) >= 5;
+  const w = meta.width ?? 0;
+  const h = meta.height ?? 0;
+  return { width: swap ? h : w, height: swap ? w : h };
+}
+
+// ─── Crop ──────────────────────────────────────────────────────────────────────
+
+export interface CropOptions {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+export async function cropImage(
+  buffer: Buffer,
+  options: CropOptions
+): Promise<{ buffer: Buffer; format: string; mime: string; width: number; height: number }> {
+  const meta = await sharp(buffer).metadata();
+  const inputFormat = meta.format ?? 'jpeg';
+  const { width: imgW, height: imgH } = orientedSize(meta);
+
+  // Recortamos a límites válidos por si el cliente envía valores fuera de rango
+  const left = Math.min(Math.max(0, Math.round(options.left)), Math.max(0, imgW - 1));
+  const top = Math.min(Math.max(0, Math.round(options.top)), Math.max(0, imgH - 1));
+  const width = Math.min(Math.max(1, Math.round(options.width)), imgW - left);
+  const height = Math.min(Math.max(1, Math.round(options.height)), imgH - top);
+
+  // .rotate() antes de .extract() para que el recorte opere sobre la imagen
+  // ya orientada, igual que la vio el usuario
+  let pipeline = sharp(buffer, { failOn: 'error' })
+    .rotate()
+    .extract({ left, top, width, height });
+
+  const out = keepOriginalFormat(pipeline, inputFormat);
+  pipeline = out.pipeline;
+  const result = await pipeline.toBuffer();
+  return { buffer: result, format: out.format, mime: out.mime, width, height };
+}
+
+// ─── Adjust ────────────────────────────────────────────────────────────────────
+
+export interface AdjustOptions {
+  brightness?: number; // 0.5–1.5, 1 = sin cambio
+  saturation?: number; // 0–2, 1 = sin cambio
+  hue?: number;        // -180..180 grados, 0 = sin cambio
+  contrast?: number;   // -50..50, 0 = sin cambio
+}
+
+export async function adjustImage(
+  buffer: Buffer,
+  options: AdjustOptions
+): Promise<{ buffer: Buffer; format: string; mime: string }> {
+  const meta = await sharp(buffer).metadata();
+  const inputFormat = meta.format ?? 'jpeg';
+
+  const brightness = options.brightness ?? 1;
+  const saturation = options.saturation ?? 1;
+  const hue = Math.round(options.hue ?? 0);
+  const contrast = options.contrast ?? 0;
+
+  let pipeline = sharp(buffer, { failOn: 'error' }).rotate();
+
+  if (brightness !== 1 || saturation !== 1 || hue !== 0) {
+    pipeline = pipeline.modulate({ brightness, saturation, hue });
+  }
+  if (contrast !== 0) {
+    const a = 1 + contrast / 100;
+    const b = 128 * (1 - a);
+    pipeline = pipeline.linear(a, b);
+  }
+
+  const out = keepOriginalFormat(pipeline, inputFormat);
+  return {
+    buffer: await out.pipeline.toBuffer(),
+    format: out.format,
+    mime: out.mime
+  };
+}
+
+// ─── Filters ───────────────────────────────────────────────────────────────────
+
+export type FilterType = 'grayscale' | 'sepia' | 'negative' | 'blur' | 'sharpen';
+
+export const FILTER_LABELS: Record<FilterType, string> = {
+  grayscale: 'escala de grises',
+  sepia: 'sepia',
+  negative: 'negativo',
+  blur: 'desenfoque',
+  sharpen: 'nitidez'
+};
+
+export function isFilterType(value: string): value is FilterType {
+  return value in FILTER_LABELS;
+}
+
+export interface FilterOptions {
+  filter: FilterType;
+  intensity?: number; // blur: sigma 1–20 (def 8) · sharpen: sigma 0.5–10 (def 2)
+}
+
+export async function applyFilter(
+  buffer: Buffer,
+  options: FilterOptions
+): Promise<{ buffer: Buffer; format: string; mime: string }> {
+  const meta = await sharp(buffer).metadata();
+  const inputFormat = meta.format ?? 'jpeg';
+
+  let pipeline = sharp(buffer, { failOn: 'error' }).rotate();
+
+  switch (options.filter) {
+    case 'grayscale':
+      pipeline = pipeline.greyscale();
+      break;
+    case 'sepia':
+      // greyscale + tint conserva el canal alfa, a diferencia de recomb
+      pipeline = pipeline.greyscale().tint({ r: 112, g: 66, b: 20 });
+      break;
+    case 'negative':
+      pipeline = pipeline.negate({ alpha: false });
+      break;
+    case 'blur': {
+      const sigma = Math.min(20, Math.max(1, options.intensity ?? 8));
+      pipeline = pipeline.blur(sigma);
+      break;
+    }
+    case 'sharpen': {
+      const sigma = Math.min(10, Math.max(0.5, options.intensity ?? 2));
+      pipeline = pipeline.sharpen({ sigma });
+      break;
+    }
+  }
+
+  const out = keepOriginalFormat(pipeline, inputFormat);
+  return {
+    buffer: await out.pipeline.toBuffer(),
+    format: out.format,
+    mime: out.mime
+  };
+}
+
+// ─── Border ────────────────────────────────────────────────────────────────────
+
+export interface BorderOptions {
+  thickness: number; // px
+  color: string;     // hex
+}
+
+export async function addBorder(
+  buffer: Buffer,
+  options: BorderOptions
+): Promise<{ buffer: Buffer; format: string; mime: string }> {
+  const meta = await sharp(buffer).metadata();
+  const inputFormat = meta.format ?? 'jpeg';
+  const t = Math.min(500, Math.max(1, Math.round(options.thickness)));
+
+  const pipeline = sharp(buffer, { failOn: 'error' })
+    .rotate()
+    .extend({ top: t, bottom: t, left: t, right: t, background: options.color });
+
+  const out = keepOriginalFormat(pipeline, inputFormat);
+  return {
+    buffer: await out.pipeline.toBuffer(),
+    format: out.format,
+    mime: out.mime
+  };
+}
+
+// ─── Image watermark (logo) ────────────────────────────────────────────────────
+
+export interface ImageWatermarkOptions {
+  position: WatermarkPosition;
+  scalePercent?: number; // ancho del logo como % del ancho de la imagen (def 20)
+  opacity?: number;      // 0–100 (def 100)
+}
+
+export async function addImageWatermark(
+  buffer: Buffer,
+  logoBuffer: Buffer,
+  options: ImageWatermarkOptions
+): Promise<{ buffer: Buffer; format: string; mime: string }> {
+  const meta = await sharp(buffer).metadata();
+  const inputFormat = meta.format ?? 'jpeg';
+  const { width: imgW } = orientedSize(meta);
+
+  const scalePercent = Math.min(100, Math.max(1, options.scalePercent ?? 20));
+  const opacity = Math.min(100, Math.max(1, options.opacity ?? 100));
+  const targetW = Math.max(8, Math.round(imgW * (scalePercent / 100)));
+
+  // Redimensionamos el logo y aplicamos opacidad multiplicando su canal alfa
+  const { data, info } = await sharp(logoBuffer, { failOn: 'error' })
+    .rotate()
+    .resize({ width: targetW })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  if (opacity < 100) {
+    for (let i = 3; i < data.length; i += 4) {
+      data[i] = Math.round(data[i] * (opacity / 100));
+    }
+  }
+
+  const logoPng = await sharp(data, {
+    raw: { width: info.width, height: info.height, channels: info.channels }
+  })
+    .png()
+    .toBuffer();
+
+  const composite: sharp.OverlayOptions =
+    options.position === 'tile'
+      ? { input: logoPng, tile: true, blend: 'over' }
+      : { input: logoPng, gravity: calcGravity(options.position), blend: 'over' };
+
+  const pipeline = sharp(buffer, { failOn: 'error' }).rotate().composite([composite]);
+
+  const out = keepOriginalFormat(pipeline, inputFormat);
+  return {
+    buffer: await out.pipeline.toBuffer(),
+    format: out.format,
+    mime: out.mime
+  };
+}
+
+// ─── Favicons ──────────────────────────────────────────────────────────────────
+
+const FAVICON_SIZES = [16, 32, 48, 180, 192, 512] as const;
+
+/** Empaqueta varios PNG en un archivo .ico (entradas PNG, soportado por todos los navegadores modernos). */
+function buildIco(entries: { size: number; png: Buffer }[]): Buffer {
+  const header = Buffer.alloc(6);
+  header.writeUInt16LE(0, 0); // reservado
+  header.writeUInt16LE(1, 2); // tipo: icono
+  header.writeUInt16LE(entries.length, 4);
+
+  const dirSize = 16 * entries.length;
+  let offset = 6 + dirSize;
+  const dirs: Buffer[] = [];
+
+  for (const e of entries) {
+    const dir = Buffer.alloc(16);
+    dir.writeUInt8(e.size >= 256 ? 0 : e.size, 0); // ancho (0 = 256)
+    dir.writeUInt8(e.size >= 256 ? 0 : e.size, 1); // alto
+    dir.writeUInt8(0, 2);  // sin paleta
+    dir.writeUInt8(0, 3);  // reservado
+    dir.writeUInt16LE(1, 4);  // planos
+    dir.writeUInt16LE(32, 6); // bits por píxel
+    dir.writeUInt32LE(e.png.length, 8);
+    dir.writeUInt32LE(offset, 12);
+    dirs.push(dir);
+    offset += e.png.length;
+  }
+
+  return Buffer.concat([header, ...dirs, ...entries.map((e) => e.png)]);
+}
+
+export interface FaviconOptions {
+  fit: 'cover' | 'contain'; // cover = recorte cuadrado · contain = encaja con fondo transparente
+}
+
+export async function generateFavicons(
+  buffer: Buffer,
+  options: FaviconOptions
+): Promise<{ name: string; data: Buffer }[]> {
+  const transparent = { r: 0, g: 0, b: 0, alpha: 0 };
+
+  const renderSize = async (size: number): Promise<Buffer> =>
+    sharp(buffer, { failOn: 'error' })
+      .rotate()
+      .resize(size, size, { fit: options.fit, background: transparent })
+      .png()
+      .toBuffer();
+
+  const pngs = new Map<number, Buffer>();
+  await Promise.all(
+    FAVICON_SIZES.map(async (size) => {
+      pngs.set(size, await renderSize(size));
+    })
+  );
+
+  const ico = buildIco(
+    [16, 32, 48].map((size) => ({ size, png: pngs.get(size)! }))
+  );
+
+  const snippet = [
+    '<!-- Copia esto dentro del <head> de tu página -->',
+    '<link rel="icon" href="/favicon.ico" sizes="48x48">',
+    '<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">',
+    '<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">',
+    '<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">',
+    '<link rel="icon" type="image/png" sizes="192x192" href="/android-chrome-192x192.png">',
+    ''
+  ].join('\n');
+
+  return [
+    { name: 'favicon.ico', data: ico },
+    { name: 'favicon-16x16.png', data: pngs.get(16)! },
+    { name: 'favicon-32x32.png', data: pngs.get(32)! },
+    { name: 'favicon-48x48.png', data: pngs.get(48)! },
+    { name: 'apple-touch-icon.png', data: pngs.get(180)! },
+    { name: 'android-chrome-192x192.png', data: pngs.get(192)! },
+    { name: 'android-chrome-512x512.png', data: pngs.get(512)! },
+    { name: 'codigo-html.txt', data: Buffer.from(snippet, 'utf-8') }
+  ];
+}
+
+// ─── Metadata ──────────────────────────────────────────────────────────────────
+
+export interface ImageMetadataSummary {
+  format: string;
+  width: number;
+  height: number;
+  hasExif: boolean;
+  hasIcc: boolean;
+  hasXmp: boolean;
+  hasGps: boolean;
+  camera?: string;
+  software?: string;
+  date?: string;
+}
+
+export async function inspectImageMetadata(buffer: Buffer): Promise<ImageMetadataSummary> {
+  const meta = await sharp(buffer).metadata();
+  const { width, height } = orientedSize(meta);
+
+  let hasGps = false;
+  let camera: string | undefined;
+  let software: string | undefined;
+  let date: string | undefined;
+
+  if (meta.exif) {
+    try {
+      const { default: exifReader } = await import('exif-reader');
+      const exif = exifReader(meta.exif);
+      hasGps = !!exif.GPSInfo && Object.keys(exif.GPSInfo).length > 0;
+      const make = exif.Image?.Make?.toString().trim();
+      const model = exif.Image?.Model?.toString().trim();
+      camera = [make, model].filter(Boolean).join(' ') || undefined;
+      software = exif.Image?.Software?.toString().trim() || undefined;
+      const rawDate = exif.Photo?.DateTimeOriginal ?? exif.Image?.DateTime;
+      if (rawDate instanceof Date) {
+        date = rawDate.toISOString();
+      } else if (rawDate) {
+        date = String(rawDate);
+      }
+    } catch {
+      // EXIF corrupto: lo ignoramos, el resumen sigue siendo útil
+    }
+  }
+
+  return {
+    format: meta.format ?? 'desconocido',
+    width,
+    height,
+    hasExif: !!meta.exif,
+    hasIcc: !!meta.icc,
+    hasXmp: !!meta.xmp,
+    hasGps,
+    camera,
+    software,
+    date
+  };
+}
+
+/** Re-encodea la imagen sin copiar ningún metadato (EXIF, GPS, ICC, XMP). */
+export async function stripImageMetadata(
+  buffer: Buffer
+): Promise<{ buffer: Buffer; format: string; mime: string }> {
+  const meta = await sharp(buffer).metadata();
+  const inputFormat = meta.format ?? 'jpeg';
+
+  // .rotate() fija la orientación en los píxeles antes de perder el tag EXIF
+  const pipeline = sharp(buffer, { failOn: 'error' }).rotate();
+
+  const out = keepOriginalFormat(pipeline, inputFormat);
+  return {
+    buffer: await out.pipeline.toBuffer(),
+    format: out.format,
+    mime: out.mime
+  };
 }
 
 // ─── Edit text (OCR + inpainting) ──────────────────────────────────────────────

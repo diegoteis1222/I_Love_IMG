@@ -97,8 +97,14 @@ Disponible en http://localhost:3000
 | Quitar fondo      | ✅     | rembg (IA)  |
 | Redimensionar     | ✅     | Sharp       |
 | Rotar y reflejar  | ✅     | Sharp       |
-| Marca de agua     | ✅     | Sharp (SVG) |
+| Recortar          | ✅     | Sharp       |
+| Ajustes de imagen | ✅     | Sharp       |
+| Filtros           | ✅     | Sharp       |
+| Bordes y marcos   | ✅     | Sharp       |
+| Marca de agua (texto o logo) | ✅ | Sharp (SVG) |
 | Añadir texto      | ✅     | Sharp (SVG) |
+| Crear favicon     | ✅     | Sharp       |
+| Eliminar metadatos | ✅    | Sharp + exif-reader |
 | Quitar marca de agua | ✅  | LaMa (IA)   |
 | Editar texto en imagen | ✅ | EasyOCR + LaMa (IA) |
 
