@@ -28,9 +28,12 @@ services:
       - "8001"
     environment:
       - REMBG_MODEL=${REMBG_MODEL:-birefnet-general}
+      - INPAINT_MAX_SIDE=${INPAINT_MAX_SIDE:-1600}
     volumes:
       # Persistimos los modelos descargados para no bajarlos en cada arranque
       - ai-models:/root/.u2net
+      # Cache de torch hub (modelo LaMa de inpainting)
+      - torch-cache:/root/.cache/torch
     networks:
       - imgedit
 
@@ -40,3 +43,4 @@ networks:
 
 volumes:
   ai-models:
+  torch-cache:

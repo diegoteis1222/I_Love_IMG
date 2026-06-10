@@ -60,3 +60,54 @@ export function describeCompress(opts: CompressDescOptions): string {
 export function describeRemoveBg(): string {
   return 'sin fondo';
 }
+
+export function describeResize(opts: {
+  width?: number;
+  height?: number;
+  scalePercent?: number;
+}): string {
+  if (opts.scalePercent) {
+    return `redimensionada al ${opts.scalePercent}%`;
+  }
+  if (opts.width && opts.height) {
+    return `redimensionada ${opts.width}x${opts.height}`;
+  }
+  if (opts.width) {
+    return `redimensionada ancho ${opts.width}px`;
+  }
+  if (opts.height) {
+    return `redimensionada alto ${opts.height}px`;
+  }
+  return 'redimensionada';
+}
+
+export function describeRotate(opts: {
+  angle?: number;
+  flipH?: boolean;
+  flipV?: boolean;
+}): string {
+  const parts: string[] = [];
+  if (opts.angle) {
+    parts.push(`rotada ${opts.angle}°`);
+  }
+  if (opts.flipH) {
+    parts.push('espejo horizontal');
+  }
+  if (opts.flipV) {
+    parts.push('espejo vertical');
+  }
+  return parts.length > 0 ? parts.join(', ') : 'rotada';
+}
+
+export function describeWatermark(): string {
+  return 'con marca de agua';
+}
+
+export function describeRemoveWatermark(): string {
+  return 'sin marca de agua';
+}
+
+export function describeAddText(): string {
+  return 'con texto';
+}
+

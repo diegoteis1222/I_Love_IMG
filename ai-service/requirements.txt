@@ -5,3 +5,8 @@ python-multipart>=0.0.12
 rembg>=2.0.75
 onnxruntime>=1.20
 pillow>=11.0
+
+# Inpainting (quitar marca de agua / objetos) — torch solo CPU
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.1
+simple-lama-inpainting>=0.1.2

@@ -47,7 +47,7 @@ export const TOOLS: Tool[] = [
     name: 'Rotar y reflejar',
     description: 'Gira o voltea imágenes en cualquier ángulo.',
     icon: '🔁',
-    status: 'coming-soon',
+    status: 'available',
     category: 'transform'
   },
   {
@@ -55,7 +55,7 @@ export const TOOLS: Tool[] = [
     name: 'Redimensionar',
     description: 'Cambia las dimensiones por píxeles o ratio.',
     icon: '📐',
-    status: 'coming-soon',
+    status: 'available',
     category: 'transform'
   },
   {
@@ -63,7 +63,7 @@ export const TOOLS: Tool[] = [
     name: 'Marca de agua',
     description: 'Añade texto o imagen como marca de agua.',
     icon: '💧',
-    status: 'coming-soon',
+    status: 'available',
     category: 'edit'
   },
   {
@@ -71,7 +71,7 @@ export const TOOLS: Tool[] = [
     name: 'Añadir texto',
     description: 'Inserta texto sobre la imagen.',
     icon: '🅰️',
-    status: 'coming-soon',
+    status: 'available',
     category: 'edit'
   },
 
@@ -79,9 +79,9 @@ export const TOOLS: Tool[] = [
   {
     slug: 'eliminar-marca-agua',
     name: 'Quitar marca de agua',
-    description: 'Limpia marcas de agua u objetos con IA (inpainting).',
+    description: 'Pinta sobre la marca de agua u objeto y la IA lo elimina.',
     icon: '🧹',
-    status: 'coming-soon',
+    status: 'available',
     category: 'enhance'
   },
   {
